@@ -11,6 +11,11 @@ from html import unescape
 
 
 class LeetCodeCrawler:
+    # 类常量：避免魔法数字
+    REQUEST_TIMEOUT = 10          # HTTP请求超时时间（秒）
+    ERROR_PREVIEW_LEN = 500       # 错误响应预览长度
+    SEPARATOR_LEN = 60            # 打印分隔线长度
+
     def __init__(self):
         self.base_url = "https://leetcode.cn"
         self.graphql_url = f"{self.base_url}/graphql"
@@ -22,7 +27,8 @@ class LeetCodeCrawler:
         })
 
     def get_daily_question(self):
-        """Get today's daily question info"""
+        """获取今日每日一题的基本信息"""
+        # GraphQL查询：获取今日题目记录
         query = """
         query questionOfToday {
             todayRecord {
@@ -51,26 +57,27 @@ class LeetCodeCrawler:
             response = self.session.post(
                 self.graphql_url,
                 json={"query": query},
-                timeout=10
+                timeout=self.REQUEST_TIMEOUT
             )
             print(f"Daily question API response status: {response.status_code}")
 
             if response.status_code == 200:
                 data = response.json()
                 if data.get("data") and data["data"].get("todayRecord"):
-                    records = data["data"]["todayRecord"]
-                    if records:
-                        return records[0]
+                    daily_records = data["data"]["todayRecord"]
+                    if daily_records:
+                        return daily_records[0]   # 取第一条记录
                 else:
-                    print(f"API response: {json.dumps(data, indent=2, ensure_ascii=False)[:500]}")
+                    print(f"API response: {json.dumps(data, indent=2, ensure_ascii=False)[:self.ERROR_PREVIEW_LEN]}")
             else:
-                print(f"API error: {response.text[:500]}")
+                print(f"API error: {response.text[:self.ERROR_PREVIEW_LEN]}")
         except Exception as e:
             print(f"Request error: {e}")
         return None
 
     def get_question_detail(self, title_slug):
-        """Get question detail by title slug"""
+        """根据题目slug获取题目详细信息（描述、标签、提示等）"""
+        # GraphQL查询：通过题目slug获取详情
         query = """
         query questionData($titleSlug: String!) {
             question(titleSlug: $titleSlug) {
@@ -99,7 +106,7 @@ class LeetCodeCrawler:
                     "query": query,
                     "variables": {"titleSlug": title_slug}
                 },
-                timeout=10
+                timeout=self.REQUEST_TIMEOUT
             )
             print(f"Question detail API response status: {response.status_code}")
 
@@ -108,41 +115,61 @@ class LeetCodeCrawler:
                 if data.get("data") and data["data"].get("question"):
                     return data["data"]["question"]
                 else:
-                    print(f"API response: {json.dumps(data, indent=2, ensure_ascii=False)[:500]}")
+                    print(f"API response: {json.dumps(data, indent=2, ensure_ascii=False)[:self.ERROR_PREVIEW_LEN]}")
             else:
-                print(f"API error: {response.text[:500]}")
+                print(f"API error: {response.text[:self.ERROR_PREVIEW_LEN]}")
         except Exception as e:
             print(f"Request error: {e}")
         return None
 
     def clean_html(self, html_content):
-        """Clean HTML content to readable text"""
+        """
+        将HTML内容转换为可读的纯文本格式
+        处理步骤：
+        1. 保护<pre>代码块内容（避免内部标签被误删）
+        2. 将<code>转为反引号形式
+        3. 将<strong>/<em>转为Markdown标记
+        4. 处理列表项<li>为项目符号
+        5. 将块级标签转为换行符
+        6. 移除剩余所有HTML标签
+        7. 解码HTML实体并清理多余空行
+        """
         if not html_content:
             return ""
 
-        # Remove HTML tags but keep content
-        text = re.sub(r'<pre[^>]*>.*?</pre>', lambda m: m.group(0).replace('<', '[').replace('>', ']'), html_content, flags=re.DOTALL)
+        # 保护<pre>中的内容，临时替换尖括号以防被后续正则破坏
+        text = re.sub(r'<pre[^>]*>.*?</pre>', 
+                      lambda m: m.group(0).replace('<', '[').replace('>', ']'), 
+                      html_content, flags=re.DOTALL)
+        # 行内代码：<code>包裹的内容用反引号包围
         text = re.sub(r'<code[^>]*>(.*?)</code>', r'`\1`', text)
+        # 粗体：<strong>转换为**文本**
         text = re.sub(r'<strong[^>]*>(.*?)</strong>', r'**\1**', text)
+        # 斜体：<em>转换为*文本*
         text = re.sub(r'<em[^>]*>(.*?)</em>', r'*\1*', text)
+        # 列表项：<li>替换为项目符号•，并在末尾加换行
         text = re.sub(r'<li[^>]*>', '• ', text)
         text = re.sub(r'</li>', '\n', text)
+        # 段落和换行：<p>和<br>转换为换行符
         text = re.sub(r'<p[^>]*>', '\n', text)
         text = re.sub(r'</p>', '\n', text)
         text = re.sub(r'<br\s*/?>', '\n', text)
+        # 删除所有剩余的HTML标签
         text = re.sub(r'<[^>]+>', '', text)
+        # 解码HTML实体（如 &nbsp; -> 空格）
         text = unescape(text)
+        # 合并连续三个以上的换行为两个换行
         text = re.sub(r'\n{3,}', '\n\n', text)
         return text.strip()
 
     def crawl_daily_question(self):
-        """Main method to crawl daily question"""
-        print("=" * 60)
+        """主流程：获取每日一题并组装结果字典"""
+        print("=" * self.SEPARATOR_LEN)
         print(f"LeetCode Daily Question Crawler")
         print(f"Date: {datetime.now().strftime('%Y-%m-%d')}")
-        print("=" * 60)
+        print("=" * self.SEPARATOR_LEN)
 
-        # Get daily question info
+        # 第一步：获取今日题目概要
         print("\nFetching daily question...")
         daily_info = self.get_daily_question()
 
@@ -157,7 +184,7 @@ class LeetCodeCrawler:
             print("Failed to get question slug")
             return None
 
-        # Get question detail
+        # 第二步：获取题目详细内容
         print(f"Fetching question detail for: {title_slug}")
         detail = self.get_question_detail(title_slug)
 
@@ -165,7 +192,7 @@ class LeetCodeCrawler:
             print("Failed to get question detail")
             return None
 
-        # Build result
+        # 第三步：组装结果
         result = {
             "date": daily_info.get("date"),
             "question_id": detail.get("questionFrontendId"),
@@ -183,18 +210,18 @@ class LeetCodeCrawler:
         return result
 
     def print_result(self, result):
-        """Print crawl result in readable format"""
+        """将爬取结果以可读格式打印到控制台"""
         if not result:
             return
 
-        print("\n" + "=" * 60)
+        print("\n" + "=" * self.SEPARATOR_LEN)
         print(f"Question #{result['question_id']}: {result['title_cn']}")
         print(f"English Title: {result['title']}")
         print(f"Difficulty: {result['difficulty']}")
         print(f"Date: {result['date']}")
         print(f"URL: {result['url']}")
         print(f"Tags: {', '.join(result['tags'])}")
-        print("=" * 60)
+        print("=" * self.SEPARATOR_LEN)
 
         print("\n[Description (Chinese)]")
         print("-" * 40)
@@ -206,7 +233,7 @@ class LeetCodeCrawler:
             for i, hint in enumerate(result['hints'], 1):
                 print(f"{i}. {self.clean_html(hint)}")
 
-        print("\n" + "=" * 60)
+        print("\n" + "=" * self.SEPARATOR_LEN)
 
 
 def main():
@@ -216,17 +243,17 @@ def main():
     if result:
         crawler.print_result(result)
 
-        # Print JSON result to terminal
-        print("\n" + "=" * 60)
+        # 输出JSON格式结果
+        print("\n" + "=" * LeetCodeCrawler.SEPARATOR_LEN)
         print("[JSON Result]")
-        print("=" * 60)
+        print("=" * LeetCodeCrawler.SEPARATOR_LEN)
         print(json.dumps(result, ensure_ascii=False, indent=2))
 
-        # Save to file
+        # 保存到文件
         output_file = f"daily_question_{result['date']}.json"
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(result, f, ensure_ascii=False, indent=2)
-        print("\n" + "=" * 60)
+        print("\n" + "=" * LeetCodeCrawler.SEPARATOR_LEN)
         print(f"Result saved to: {output_file}")
     else:
         print("Failed to crawl daily question")
