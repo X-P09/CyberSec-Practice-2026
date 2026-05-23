@@ -1,0 +1,45 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# --- Virtual env ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- IDE / Editor ---
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Secrets (严禁提交) ---
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+secrets.*
+credentials.*
+
+# --- Project-generated artifacts ---
+成员代码/tangzekai/output/
+daily_question_*.json
+
+# --- Jupyter / Notebook ---
+.ipynb_checkpoints/
+
+# --- Logs ---
+*.log
+logs/
